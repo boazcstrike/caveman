@@ -1,3 +1,73 @@
+<!-- FORK NOTES START: keep this block at the top when merging upstream -->
+> [!NOTE]
+> **This is a fork of [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman).** I keep it so my Claude Code install runs a fixed copy while the fix waits upstream. Everything below this block is upstream's README, unchanged.
+
+## About this fork
+
+### Why it exists
+
+The `caveman-explore` skill (`skills/caveman-explore/SKILL.md`) is written as a subagent but ships as a skill with no `context:` key, so Claude Code runs it **inline**. Inline, three things go wrong:
+
+1. **`model: haiku` switches the main conversation's model.** For an inline skill, `model` overrides the session model for the rest of the turn. The prompt cache is per model, so the whole conversation is re-cached on Haiku at full write price, and Haiku reads the entire main context. That is the opposite of a cheap explorer.
+2. **`tools: Read, Glob, Grep` is ignored.** `tools` is a subagent key, not a skill key, so nothing enforces read-only.
+3. **The description is false inline.** It says "its reads stay out of main context", but inline every Grep and Read result lands in the main context.
+
+### What this fork changes
+
+| Change | Where |
+|---|---|
+| Adds `context: fork`, `agent: Explore`, `background: false` to the skill frontmatter | `skills/caveman-explore/SKILL.md` |
+| Test asserts the three new keys | `skills/caveman-explore/tests/skill-file.test.mjs` |
+| Regenerated embedded copy | `packages/cli/src/agent-skills.generated.ts` (from `node packages/cli/scripts/compile-registries.mjs`) |
+| Permission-boundary note | `docs/technical/exploration-and-delegation.md` |
+| This section | `README.md` (fork only, never sent upstream) |
+
+With `context: fork` the skill runs as a separate Explore subagent on Haiku. The main model and its cache stay untouched, the reads stay out of main context, and the Explore agent type makes it read-only. `background: false` keeps the caller waiting for the citations. No `$ARGUMENTS` placeholder is needed: Claude Code appends `ARGUMENTS: <input>` when a skill has none.
+
+Reference: Claude Code skills docs, [Frontmatter reference](https://code.claude.com/docs/en/skills#frontmatter-reference) and [Run skills in a subagent](https://code.claude.com/docs/en/skills#run-skills-in-a-subagent).
+
+### Upstream status
+
+- Upstream PR: [JuliusBrussee/caveman#1533](https://github.com/JuliusBrussee/caveman/pull/1533)
+- When it merges, this fork's only remaining difference is this README section. At that point I can either keep the fork (to control when updates land) or point the install back at upstream.
+
+### Branches
+
+| Branch | Purpose |
+|---|---|
+| `main` | Upstream `main` + the fix + this section. The plugin installs from here. |
+| `fix/caveman-explore-fork-context` | The fix alone, based on upstream `main`. Source of the upstream PR. Delete after it merges. |
+
+### How my install uses this fork
+
+The `caveman` marketplace in `~/.claude/settings.json` (`extraKnownMarketplaces.caveman`) points at `boazcstrike/caveman` instead of `JuliusBrussee/caveman`. Claude Code reads `.claude-plugin/marketplace.json` here, so the plugin keeps the name `caveman@caveman` and nothing else in my setup changes.
+
+To go back to upstream: set the marketplace repo to `JuliusBrussee/caveman`, then run `claude plugin marketplace update caveman` and `claude plugin update caveman@caveman`.
+
+### Pulling upstream updates
+
+```bash
+git clone https://github.com/boazcstrike/caveman.git && cd caveman   # once
+git remote add upstream https://github.com/JuliusBrussee/caveman.git  # once
+git fetch upstream
+git checkout main
+git merge upstream/main
+```
+
+- **Conflict in `README.md`:** keep this block at the top (between the `FORK NOTES` markers) and take upstream's text for everything below it.
+- **Conflict in `skills/caveman-explore/SKILL.md`, or `packages/cli/src/agent-skills.generated.ts`:** if upstream merged the fix, take upstream's version. If not, keep the three frontmatter keys, then rerun `node packages/cli/scripts/compile-registries.mjs` and `node --test --test-force-exit skills/caveman-explore/tests/*.mjs`.
+- Push `main`, then refresh the install: `claude plugin marketplace update caveman` and `claude plugin update caveman@caveman`. Start a new session to load it.
+
+### Checking the fix after an update
+
+```bash
+grep -E '^(context|agent|background|model):' skills/caveman-explore/SKILL.md
+```
+
+Expected: `context: fork`, `agent: Explore`, `background: false`, `model: haiku`.
+
+<!-- FORK NOTES END -->
+
 <div align="center">
 
 <table>
